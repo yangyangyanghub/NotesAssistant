@@ -1,4 +1,118 @@
+<div align="right">
+  <a href="#notesassistant-中文">中文</a> | <a href="#notesassistant">English</a>
+</div>
+
 # NotesAssistant
+
+## Project Introduction
+
+NotesAssistant is an AI-based personal knowledge base management tool focused on solving content export and management issues for closed systems like WeChat Favorites. By combining Claude Code and MCP (Model Context Protocol) technology, it enables intelligent desktop application control, providing users with an efficient and secure knowledge management solution.
+
+## Key Features
+
+- **WeChat Favorites Export**：Automatically batch export WeChat Favorites content, including screenshots, text, and metadata
+- **Long Content Processing**：Support scroll-spliced long screenshots to ensure complete capture of long articles
+- **Intelligent Recognition**：Automatically identify UI elements through MCP technology without manual calibration
+- **Resume Export**：Support resuming export process after interruption to avoid duplicate work
+- **Structured Storage**：Store exported content in a structured way for easy subsequent management and search
+
+## Quick Start
+
+### Environment Requirements
+
+- macOS system
+- Python 3.9+
+- Claude Code account
+- WeChat for Mac
+
+### Install Dependencies
+
+1. Install Python dependencies：
+
+```bash
+pip install pyautogui pillow
+```
+
+2. Install MCP Server：
+
+```bash
+claude mcp add macos-control -- npx -y macos-control-mcp
+```
+
+3. Fix MCP dependencies (if encountering Quartz module error)：
+
+```bash
+unset http_proxy https_proxy
+~/.macos-control-mcp/.venv/bin/pip install pyobjc-framework-Quartz pyobjc-framework-Vision
+```
+
+### Usage
+
+1. Open WeChat and enter the Favorites page
+
+2. Run the export script：
+
+```bash
+python3 auto_export.py [export count]
+```
+
+For example, export 100 favorites：
+
+```bash
+python3 auto_export.py 100
+```
+
+3. After export is complete, content will be saved in the `output/全部收藏/` directory, each favorite includes：
+   - `screenshot.png` - Detail screenshot (auto-spliced for long content)
+   - `content.txt` - Text content (if copyable)
+   - `meta.json` - Metadata (time, URL, pages, etc.)
+
+## Technical Principle
+
+1. **UI Automation**：Use pyautogui to simulate mouse and keyboard operations
+2. **MCP Integration**：Implement screen capture and OCR recognition through macos-control-mcp
+3. **Retina Display Adaptation**：Solve the mapping problem between physical pixels and logical pixels
+4. **Scroll Calibration**：Verify scroll effect through screenshot comparison to ensure each content is correctly exported
+5. **Error Handling**：Adopt different processing strategies for different types of favorites (such as chat records)
+
+## Notes
+
+- **WeChat Security**：Using UI automation may have certain account banning risks, it is recommended to reasonably control operation frequency
+- **Permission Requirements**：Need to grant screen recording and accessibility permissions
+- **Network Environment**：Stable network connection is required when installing MCP dependencies
+- **WeChat Version**：Different versions of WeChat UI may have differences, and script parameters may need to be adjusted
+
+## Project Structure
+
+```
+NotesAssistant/
+├── docs/                 # Documentation directory
+│   ├── 用Claude自动导出微信收藏.md  # Detailed project description
+│   └── superpowers/      # Advanced feature documentation
+├── output/               # Export result directory
+│   └── 全部收藏/         # WeChat Favorites export content
+├── auto_export.py        # Main export script
+└── README.md             # Project description
+```
+
+## Future Plans
+
+1. **AI Summary**：Use LLM to generate summaries for each favorite
+2. **Auto Classification**：Automatically categorize and tag based on content semantics
+3. **Knowledge Base Integration**：Import to knowledge base tools like Obsidian
+4. **Extended Support**：Support content export from other applications (such as Youdao Cloud Notes, Mubu, etc.)
+
+## Contribution Guide
+
+Welcome to submit Issues and Pull Requests to help improve this project.
+
+## License
+
+This project is licensed under the MIT License.
+
+---
+
+# NotesAssistant-中文
 
 ## 项目简介
 
@@ -105,113 +219,3 @@ NotesAssistant/
 ## 许可证
 
 本项目采用 MIT 许可证。
-
----
-
-# NotesAssistant
-
-## Project Introduction
-
-NotesAssistant is an AI-based personal knowledge base management tool focused on solving content export and management issues for closed systems like WeChat Favorites. By combining Claude Code and MCP (Model Context Protocol) technology, it实现了 intelligent desktop application control, providing users with an efficient and secure knowledge management solution.
-
-## Key Features
-
-- **WeChat Favorites Export**：Automatically batch export WeChat Favorites content, including screenshots, text, and metadata
-- **Long Content Processing**：Support scroll-spliced long screenshots to ensure complete capture of long articles
-- **Intelligent Recognition**：Automatically identify UI elements through MCP technology without manual calibration
-- **Resume Export**：Support resuming export process after interruption to avoid duplicate work
-- **Structured Storage**：Store exported content in a structured way for easy subsequent management and search
-
-## Quick Start
-
-### Environment Requirements
-
-- macOS system
-- Python 3.9+
-- Claude Code account
-- WeChat for Mac
-
-### Install Dependencies
-
-1. Install Python dependencies：
-
-```bash
-pip install pyautogui pillow
-```
-
-2. Install MCP Server：
-
-```bash
-claude mcp add macos-control -- npx -y macos-control-mcp
-```
-
-3. Fix MCP dependencies (if encountering Quartz module error)：
-
-```bash
-unset http_proxy https_proxy
-~/.macos-control-mcp/.venv/bin/pip install pyobjc-framework-Quartz pyobjc-framework-Vision
-```
-
-### Usage
-
-1. Open WeChat and enter the Favorites page
-
-2. Run the export script：
-
-```bash
-python3 auto_export.py [export count]
-```
-
-For example, export 100 favorites：
-
-```bash
-python3 auto_export.py 100
-```
-
-3. After export is complete, content will be saved in the `output/全部收藏/` directory, each favorite includes：
-   - `screenshot.png` - Detail screenshot (auto-spliced for long content)
-   - `content.txt` - Text content (if copyable)
-   - `meta.json` - Metadata (time, URL, pages, etc.)
-
-## Technical Principle
-
-1. **UI Automation**：Use pyautogui to simulate mouse and keyboard operations
-2. **MCP Integration**：Implement screen capture and OCR recognition through macos-control-mcp
-3. **Retina Display Adaptation**：Solve the mapping problem between physical pixels and logical pixels
-4. **Scroll Calibration**：Verify scroll effect through screenshot comparison to ensure each content is correctly exported
-5. **Error Handling**：Adopt different processing strategies for different types of favorites (such as chat records)
-
-## Notes
-
-- **WeChat Security**：Using UI automation may have certain account banning risks, it is recommended to reasonably control operation frequency
-- **Permission Requirements**：Need to grant screen recording and accessibility permissions
-- **Network Environment**：Stable network connection is required when installing MCP dependencies
-- **WeChat Version**：Different versions of WeChat UI may have differences, and script parameters may need to be adjusted
-
-## Project Structure
-
-```
-NotesAssistant/
-├── docs/                 # Documentation directory
-│   ├── 用Claude自动导出微信收藏.md  # Detailed project description
-│   └── superpowers/      # Advanced feature documentation
-├── output/               # Export result directory
-│   └── 全部收藏/         # WeChat Favorites export content
-├── auto_export.py        # Main export script
-└── README.md             # Project description
-```
-
-## Future Plans
-
-1. **AI Summary**：Use LLM to generate summaries for each favorite
-2. **Auto Classification**：Automatically categorize and tag based on content semantics
-3. **Knowledge Base Integration**：Import to knowledge base tools like Obsidian
-4. **Extended Support**：Support content export from other applications (such as Youdao Cloud Notes, Mubu, etc.)
-
-## Contribution Guide
-
-Welcome to submit Issues and Pull Requests to help improve this project.
-
-## License
-
-This project is licensed under the MIT License.
