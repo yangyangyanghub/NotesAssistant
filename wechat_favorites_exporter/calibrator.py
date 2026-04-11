@@ -70,22 +70,53 @@ def compute_category_position(data: CalibrationData, category: str) -> tuple[int
 def run_calibration() -> CalibrationData:
     import pyautogui
     print("\n=== 坐标校准 ===")
-    print("请确保微信收藏夹页面已打开\n")
-    input("步骤 1/4：请把鼠标移到左侧「全部收藏」的位置，然后按 Enter...")
+    print("请确保微信收藏夹页面已打开且可见（不要被其他窗口挡住）")
+    print("校准时：先把鼠标移到指定位置，再切回终端按 Enter\n")
+
+    print("步骤 1/4：请把鼠标移到左侧「全部收藏」文字上")
+    print("         （注意是微信窗口里的，不是终端里的）")
+    _wait_for_mouse_position()
     category_start_pos = pyautogui.position()
-    print(f"  记录: {category_start_pos}")
-    input("步骤 2/4：请把鼠标移到右侧列表第一条收藏的中心，然后按 Enter...")
+    print(f"  ✓ 记录: ({category_start_pos.x}, {category_start_pos.y})")
+
+    print("\n步骤 2/4：请把鼠标移到右侧列表【第一条收藏】的中心位置")
+    print("         （右侧大面积区域里最上面那条卡片的中间）")
+    _wait_for_mouse_position()
     first_item_pos = pyautogui.position()
-    print(f"  记录: {first_item_pos}")
-    input("步骤 3/4：请把鼠标移到右侧列表可见区域的底部边缘，然后按 Enter...")
+    print(f"  ✓ 记录: ({first_item_pos.x}, {first_item_pos.y})")
+
+    print("\n步骤 3/4：请把鼠标移到右侧列表可见区域的【最底部边缘】")
+    print("         （最后一条可见卡片的下边沿）")
+    _wait_for_mouse_position()
     list_bottom_pos = pyautogui.position()
-    print(f"  记录: {list_bottom_pos}")
-    visible_count = int(input("步骤 4/4：当前可见几条收藏？请输入数字: "))
+    print(f"  ✓ 记录: ({list_bottom_pos.x}, {list_bottom_pos.y})")
+
+    visible_count = int(input("\n步骤 4/4：当前右侧列表里能看到几条收藏？请输入数字: "))
+
     data = CalibrationData(
         category_start_pos=(category_start_pos.x, category_start_pos.y),
         first_item_pos=(first_item_pos.x, first_item_pos.y),
         list_bottom_pos=(list_bottom_pos.x, list_bottom_pos.y),
         visible_count=visible_count,
     )
+
+    # 校验合理性
+    if data.list_area_height < 100:
+        print(f"\n⚠ 警告：列表区域高度只有 {data.list_area_height}px，可能校准有误！")
+        print("  第一条收藏 Y={}, 底部边缘 Y={}".format(first_item_pos.y, list_bottom_pos.y))
+        print("  请确认步骤 2 和 3 指的是微信右侧列表区域，不是左侧分类栏")
+        retry = input("  要重新校准吗？(y/n): ").strip().lower()
+        if retry == "y":
+            return run_calibration()
+
     print(f"\n校准完成！列表区域高度: {data.list_area_height}px, 每次滚动: {data.scroll_amount}px")
     return data
+
+
+def _wait_for_mouse_position():
+    """等待用户移动鼠标到目标位置后按 Enter。提示用户先移鼠标再回终端按键。"""
+    import pyautogui
+    input("         >>> 移好鼠标后，切回终端按 Enter <<<")
+    # 给用户一小段时间确保鼠标在正确位置
+    import time
+    time.sleep(0.3)

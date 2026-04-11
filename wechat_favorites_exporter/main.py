@@ -101,10 +101,18 @@ def main():
             time.sleep(0.15)
         time.sleep(0.5)
 
+    # 确保微信在前台
+    activate_wechat()
+    time.sleep(0.5)
+
     print(f"\n开始导出分类「{category}」...")
+    print("（3秒后开始，请确保微信收藏夹可见...）")
+    time.sleep(3)
+
     index = start_index
     consecutive_end = 0
     prev_hash = None
+    prev_list_img = None
     exported = 0
     skipped = 0
     failed = 0
@@ -132,7 +140,7 @@ def main():
                         title = meta.get("preview", {}).get("title", "")[:30]
                         print(f"  [{index}] {status} - {title}")
 
-                        if prev_hash and images_are_similar(list_img, list_img):
+                        if prev_list_img is not None and images_are_similar(list_img, prev_list_img):
                             consecutive_end += 1
                         else:
                             consecutive_end = 0
@@ -151,6 +159,7 @@ def main():
                 "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }, progress_path)
 
+            prev_list_img = list_img
             pyautogui.scroll(-3)
             random_delay()
             index += 1
