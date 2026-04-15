@@ -20,26 +20,37 @@ NotesAssistant is an AI-based personal knowledge base management tool focused on
 
 ### Environment Requirements
 
-- macOS system
+- **macOS** or **Windows** system
 - Python 3.9+
-- Claude Code account
-- WeChat for Mac
+- WeChat (Mac or Windows version)
+
+### macOS Only
+
+- Claude Code account（optional, for MCP features）
+
+### Windows Additional Steps
+
+1. Install [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) for OCR support
+2. Add Tesseract to your PATH or set `TESSDATA_PREFIX` environment variable
+3. `pywin32` will be automatically installed on Windows via `requirements.txt`
 
 ### Install Dependencies
 
 1. Install Python dependencies：
 
 ```bash
-pip install pyautogui pillow
+pip install -r requirements.txt
 ```
 
-2. Install MCP Server：
+2. **macOS only**：Install MCP Server（optional, for advanced OCR）：
 
 ```bash
 claude mcp add macos-control -- npx -y macos-control-mcp
 ```
 
-3. Fix MCP dependencies (if encountering Quartz module error)：
+3. **Windows only**：Install Tesseract OCR from https://github.com/UB-Mannheim/tesseract/wiki and add to PATH
+
+4. **macOS only**：Fix MCP dependencies (if encountering Quartz module error)：
 
 ```bash
 unset http_proxy https_proxy
@@ -130,26 +141,37 @@ NotesAssistant 是一个基于 AI 的个人知识库管理工具，专注于解�
 
 ### 环境要求
 
-- macOS 系统
+- **macOS** 或 **Windows** 系统
 - Python 3.9+
-- Claude Code 账号
-- 微信 Mac 版
+- 微信（Mac 或 Windows 版）
+
+### macOS 专属
+
+- Claude Code 账号（可选，MCP 功能使用）
+
+### Windows 额外步骤
+
+1. 安装 [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) 用于 OCR 识别
+2. 将 Tesseract 添加到 PATH 环境变量，或设置 `TESSDATA_PREFIX`
+3. `pywin32` 会在 `pip install -r requirements.txt` 时自动安装
 
 ### 安装依赖
 
 1. 安装 Python 依赖：
 
 ```bash
-pip install pyautogui pillow
+pip install -r requirements.txt
 ```
 
-2. 安装 MCP Server：
+2. **仅 macOS**：安装 MCP Server（可选，高级 OCR 功能）：
 
 ```bash
 claude mcp add macos-control -- npx -y macos-control-mcp
 ```
 
-3. 修复 MCP 依赖（如果遇到 Quartz 模块错误）：
+3. **仅 Windows**：从 https://github.com/UB-Mannheim/tesseract/wiki 下载并安装 Tesseract OCR，添加到 PATH
+
+4. **仅 macOS**：修复 MCP 依赖（如果遇到 Quartz 模块错误）：
 
 ```bash
 unset http_proxy https_proxy

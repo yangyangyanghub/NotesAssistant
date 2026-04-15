@@ -1,274 +1,251 @@
 #!/usr/bin/env python3
 """
-Auto-export WeChat favorites.
-
-Strategy: always double-click the FIRST visible item, export it,
-then scroll down by one item. Verify scroll worked by comparing
-list screenshots before/after.
+Auto-export WeChat favorites (Windows version).
+Strategy: Process visible cards one by one, then scroll down for next page.
 """
-
 import json
 import os
-import re
-import subprocess
+import platform
 import sys
 import time
-from datetime import datetime
+
+# Fix Windows console encoding
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 
 import pyautogui
-from PIL import Image
+import pyperclip
+
+# === Platform Detection ===r_engine = None
+
+# === Platform Detection ===
+_IS_MACOS = platform.system() == "Darwin"
+_IS_WINDOWS = platform.system() == "Windows"
+_MODIFIER_KEY = "command" if _IS_MACOS else "ctrl"
 
 # === Config ===
 OUTPUT_DIR = "output/全部收藏"
-ITEM_X = 420         # logical x for clicking item cards
-ITEM_Y = 125         # logical y of the first visible item
-LIST_AREA_X = 380    # x to click list area for focus
-LIST_AREA_Y = 300    # y to click list area for focus
-SCROLL_AMOUNT = 10   # per scroll() call
-SCROLL_CALLS = 5     # calls per item (total = 50 units)
+FIRST_ITEM_X = 1040      # X coordinate for clicking cards
+FIRST_ITEM_Y = 158       # Y coordinate of first visible card
+ITEM_HEIGHT = 130        # Vertical distance between adjacent cards
+ITEMS_PER_PAGE = 7       # Cards visible per screen
+LIST_AREA_X = 151        # X of "全部收藏" category tab
+LIST_AREA_Y = 153        # Y of "全部收藏" category tab
 
+# Menu coordinates (relative to window's top-right corner)
+# Based on measurements: 3 dots at (1803, 23), Copy Link at (1683, 241)
+MENU_3DOTS_OFFSET_X = 133  # From right edge (WindowWidth - 133)
+MENU_3DOTS_OFFSET_Y = 31   # From top edge
+MENU_COPY_LINK_OFFSET_X = 253  # From right edge
+MENU_COPY_LINK_OFFSET_Y = 249  # From top edge
 
-# === Helpers ===
-def activate():
-    subprocess.run(
-        ['osascript', '-e', 'tell application "WeChat" to activate'],
-        capture_output=True, text=True,
+# Import window manager
+try:
+    from wechat_favorites_exporter.window_manager import (
+        activate_wechat,
+        close_front_window,
+        get_front_window_bounds,
+        get_wechat_window_count,
     )
-
-
-def win_count():
-    r = subprocess.run(
-        ['osascript', '-e',
-         'tell application "System Events" to tell process "WeChat" to count of windows'],
-        capture_output=True, text=True, timeout=10,
-    )
-    return int(r.stdout.strip())
-
-
-def get_bounds():
-    time.sleep(0.5)
-    script = (
-        'tell application "System Events" to tell process "WeChat"\n'
-        'set p to position of front window\nset s to size of front window\n'
-        'return "" & (item 1 of p) & "," & (item 2 of p) & "," '
-        '& (item 1 of s) & "," & (item 2 of s)\nend tell'
-    )
-    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=10)
-    if r.returncode != 0 or not r.stdout.strip():
+except ImportError:
+    print("WARNING: window_manager not found, using fallback")
+    def activate_wechat():
+        pyautogui.hotkey('alt', 'tab')
+        time.sleep(0.5)
+    def get_front_window_bounds():
         return None
-    parts = [int(x.strip()) for x in r.stdout.strip().split(',')]
-    return tuple(parts[:4])
+    def get_wechat_window_count():
+        return 1
+    def close_front_window():
+        pyautogui.hotkey('alt', 'f4')
+        time.sleep(0.3)
 
 
-def close_win():
-    subprocess.run(
-        ['osascript', '-e',
-         'tell application "System Events" to tell process "WeChat" '
-         'to keystroke "w" using command down'],
-        capture_output=True, text=True,
-    )
-
-
-def focus_list():
-    """Click on the list area to give it scroll focus."""
-    activate()
-    time.sleep(0.2)
-    # Single click on list area (not double-click, to avoid opening item)
-    pyautogui.click(LIST_AREA_X, LIST_AREA_Y)
-    time.sleep(0.2)
-
-
-def scroll_down_one():
-    """Scroll the list down by one item."""
-    # First ensure list area has focus
-    focus_list()
-    # Now scroll
-    for _ in range(SCROLL_CALLS):
-        pyautogui.scroll(-SCROLL_AMOUNT)
-        time.sleep(0.08)
-    time.sleep(0.3)
-
-
-def list_snapshot():
-    """Snapshot the first item area for comparison."""
-    # Capture the area where the first item card is (Retina 2x)
-    return pyautogui.screenshot(region=(260, 70, 220, 150))
-
-
-def snapshots_differ(a, b):
-    """Check if two snapshots are meaningfully different."""
-    a_small = a.resize((32, 32)).convert("L")
-    b_small = b.resize((32, 32)).convert("L")
-    pa, pb = list(a_small.getdata()), list(b_small.getdata())
-    diff = sum(abs(x - y) for x, y in zip(pa, pb))
-    avg_diff = diff / len(pa)
-    return avg_diff > 3  # threshold: avg pixel diff > 3
-
-
-def long_screenshot(bounds):
-    """Scroll detail window and stitch screenshots."""
-    x, y, w, h = bounds
-    pyautogui.moveTo(x + w // 2, y + h // 2)
-    time.sleep(0.2)
-
-    def _hash(img):
-        s = img.resize((8, 8)).convert("L")
-        return list(s.getdata())
-
-    def _similar(a, b):
-        ha, hb = _hash(a), _hash(b)
-        return sum(abs(x - y) for x, y in zip(ha, hb)) < 300
-
-    shots = []
-    prev = None
-    same = 0
-    for page in range(20):
-        shot = pyautogui.screenshot(region=bounds)
-        if prev and _similar(shot, prev):
-            same += 1
-            if same >= 2:
-                break
-        else:
-            same = 0
-            shots.append(shot)
-        prev = shot
-        if page < 19:
-            pyautogui.scroll(-5)
-            time.sleep(0.4)
-
-    if not shots:
-        return pyautogui.screenshot(region=bounds), 1
-    if len(shots) == 1:
-        return shots[0], 1
-
-    overlap = int(shots[0].height * 0.1)
-    total_h = shots[0].height + sum(s.height - overlap for s in shots[1:])
-    result = Image.new("RGB", (shots[0].width, total_h))
-    yp = 0
-    for i, s in enumerate(shots):
-        if i == 0:
-            result.paste(s, (0, 0))
-            yp = s.height
-        else:
-            c = s.crop((0, overlap, s.width, s.height))
-            result.paste(c, (0, yp))
-            yp += c.height
-    return result, len(shots)
-
-
-def export_item(idx):
-    """Export the first visible item in the list."""
-    item_dir = os.path.join(OUTPUT_DIR, f'{idx:03d}')
-    meta_path = os.path.join(item_dir, 'meta.json')
-    os.makedirs(item_dir, exist_ok=True)
-
-    activate()
-    time.sleep(0.3)
-
-    before = win_count()
-    pyautogui.doubleClick(ITEM_X, ITEM_Y)
-    time.sleep(1.5)
-    after = win_count()
-
-    if after <= before:
-        pyautogui.screenshot().save(os.path.join(item_dir, 'screenshot.png'))
-        meta = {
-            'index': idx,
-            'timestamp': datetime.now().isoformat(timespec='seconds'),
-            'open_failed': True,
-        }
-        with open(meta_path, 'w') as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        print(f'  [{idx:03d}] no window — list screenshot saved')
-        return
-
-    bounds = get_bounds()
-    if not bounds:
-        close_win()
-        return
-
-    # Long screenshot
-    img, pages = long_screenshot(bounds)
-    img.save(os.path.join(item_dir, 'screenshot.png'))
-
-    # Copy text (scroll back to top first)
-    pyautogui.moveTo(bounds[0] + bounds[2] // 2, bounds[1] + bounds[3] // 2)
-    for _ in range(30):
-        pyautogui.scroll(10)
-    time.sleep(0.2)
-    pyautogui.hotkey('command', 'a')
-    time.sleep(0.2)
-    pyautogui.hotkey('command', 'c')
-    time.sleep(0.2)
-    r = subprocess.run(['pbpaste'], capture_output=True, text=True, timeout=5)
-    text = (r.stdout or '').strip()
-    if text:
-        with open(os.path.join(item_dir, 'content.txt'), 'w', encoding='utf-8') as f:
-            f.write(text)
-
-    urls = re.findall(r'https?://[^\s<>"\'）》，。]+', text) if text else []
-
-    close_win()
+def close_detail_window():
+    """Close the detail view / built-in browser window"""
+    pyautogui.press('esc')
     time.sleep(0.5)
+    if get_wechat_window_count() > 1:
+        pyautogui.hotkey('alt', 'f4')
+        time.sleep(0.5)
 
-    meta = {
-        'index': idx,
-        'timestamp': datetime.now().isoformat(timespec='seconds'),
-        'has_text': len(text) > 0,
-        'text_length': len(text),
-        'urls': urls,
-        'screenshot_pages': pages,
-    }
-    with open(meta_path, 'w', encoding='utf-8') as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
-    print(f'  [{idx:03d}] ✓ ({pages}p, {len(text)}c)')
+
+def export_card(global_idx: int, card_y: int) -> str:
+    """Export a single favorite card. Returns the extracted link or None."""
+    
+    activate_wechat()
+    time.sleep(0.3)
+
+    # Clear clipboard to ensure we catch the new URL
+    pyperclip.copy('')
+
+    # Click to open the card
+    pyautogui.click(FIRST_ITEM_X, card_y)
+    # Increase wait time to ensure content is fully loaded
+    time.sleep(2.5)
+
+    bounds = get_front_window_bounds()
+    if not bounds:
+        print(f'  [{global_idx:03d}] Window lost')
+        return None
+
+    wx, wy, ww, wh = bounds
+    
+    extracted_url = ""
+    try:
+        # Calculate menu positions based on current window bounds
+        dots_x = wx + ww - MENU_3DOTS_OFFSET_X
+        dots_y = wy + MENU_3DOTS_OFFSET_Y
+        link_x = wx + ww - MENU_COPY_LINK_OFFSET_X
+        link_y = wy + MENU_COPY_LINK_OFFSET_Y
+
+        # Click "..."
+        pyautogui.click(dots_x, dots_y)
+        time.sleep(3.0)
+        
+        # Click "Copy Link"
+        pyautogui.click(link_x, link_y)
+        time.sleep(3.0)
+        
+        # Get URL from clipboard
+        # Check twice to be safe against race conditions
+        extracted_url = (pyperclip.paste() or '').strip()
+        if not extracted_url.startswith('http'):
+            time.sleep(1.0)
+            extracted_url = (pyperclip.paste() or '').strip()
+            if not extracted_url.startswith('http'):
+                extracted_url = None
+            
+    except Exception as e:
+        print(f'  [Menu error: {e}]')
+        return None
+
+    # Close menu
+    pyautogui.press('esc')
+    time.sleep(0.2)
+
+    # Close detail
+    pyautogui.press('esc')
+    time.sleep(0.5)
+    close_detail_window()
+    time.sleep(0.5)
+    
+    return extracted_url
 
 
 def main():
     max_items = int(sys.argv[1]) if len(sys.argv) > 1 else 50
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    # Link output file
+    LINKS_FILE = "wechat_links.txt"
+    saved_links = []
+    
+    # Based on measurement: User requested exact scroll distance: 890px
+    SCROLL_DISTANCE_PX = 890
+    # 890px / 18px per scroll ≈ 50 clicks.
+    SCROLL_CLICKS = 50 
+    SCROLL_STEP = 18
 
-    activate()
+    # Activate WeChat and go to 全部收藏
+    activate_wechat()
     time.sleep(0.5)
-    pyautogui.click(137, 150)  # 全部收藏
+    pyautogui.click(LIST_AREA_X, LIST_AREA_Y)
     time.sleep(0.5)
 
     # Scroll to top first
-    pyautogui.moveTo(LIST_AREA_X, LIST_AREA_Y)
-    for _ in range(30):
-        pyautogui.scroll(10)
-        time.sleep(0.05)
-    time.sleep(0.5)
+    bounds = get_front_window_bounds()
+    if bounds:
+        wx, wy, ww, wh = bounds
+        scroll_x = wx + int(ww * 0.7)
+        scroll_y = wy + 200
+        
+        pyautogui.moveTo(scroll_x, scroll_y)
+        for _ in range(50):
+            pyautogui.scroll(20)
+            time.sleep(0.02)
+        time.sleep(0.5)
 
-    print(f"Exporting up to {max_items} items from 全部收藏")
-    print(f"Output: {os.path.abspath(OUTPUT_DIR)}\n")
+    print(f"Extracting links for up to {max_items} items...")
+    print(f"Will save to: {os.path.abspath(LINKS_FILE)}\n")
+    print(f"Card: X={FIRST_ITEM_X}, Y={FIRST_ITEM_Y}, Height={ITEM_HEIGHT}")
+    print(f"Items per page: {ITEMS_PER_PAGE}")
+    print(f"Scroll strategy: {SCROLL_DISTANCE_PX}px per page via {SCROLL_CLICKS} clicks\n")
 
-    no_scroll_count = 0
+    global_idx = 0
+    page = 0
+    seen_urls = set() # For faster duplicate checking
 
-    for idx in range(max_items):
-        snap_before = list_snapshot()
+    while global_idx < max_items:
+        items_this_page = min(ITEMS_PER_PAGE, max_items - global_idx)
+        
+        # CRITICAL FIX for Page 2+ Failure:
+        # Before starting a new page, explicitly activate WeChat and hover to wake up the DOM.
+        # WeChat often goes "sleep" or loses focus after a scroll event.
+        print(f">>> Starting Page {page + 1}: Waking up focus...")
+        activate_wechat()
+        time.sleep(0.5)
+        pyautogui.click(LIST_AREA_X, LIST_AREA_Y) # Click sidebar to ensure list view is active
+        time.sleep(0.5)
 
-        print(f'Item {idx}:')
-        export_item(idx)
-
-        # Scroll down one item
-        scroll_down_one()
-
-        # Verify scroll worked
-        snap_after = list_snapshot()
-        if snapshots_differ(snap_before, snap_after):
-            no_scroll_count = 0
-            print(f'  → scrolled OK')
-        else:
-            no_scroll_count += 1
-            print(f'  → scroll may have failed ({no_scroll_count}/5)')
-            if no_scroll_count >= 5:
-                print(f'\nList not scrolling — reached end after {idx + 1} items.')
+        for local_idx in range(items_this_page):
+            card_y = FIRST_ITEM_Y + (local_idx * ITEM_HEIGHT)
+            print(f'Item {global_idx} (local {local_idx}, Y={card_y}):', end=' ')
+            
+            url = export_card(global_idx, card_y)
+            
+            if url:
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    saved_links.append(url)
+                    with open(LINKS_FILE, 'a', encoding='utf-8') as f:
+                        f.write(url + '\n')
+                    print(f"[LINK] {url[:30]}...")
+                else:
+                    print("[SKIP] Duplicate")
+            else:
+                print("[NO LINK]")
+                
+            global_idx += 1
+            if global_idx >= max_items:
                 break
-            # Try extra scroll
-            scroll_down_one()
-
-    print(f'\n=== Done: {idx + 1} items exported ===')
+        
+        # Scroll down to next page
+        if global_idx < max_items:
+            bounds = get_front_window_bounds()
+            if bounds:
+                wx, wy, ww, wh = bounds
+                scroll_x = wx + int(ww * 0.7)
+                scroll_y = wy + int(wh * 0.5)
+                
+                print(f'\n--- Scrolling to page {page + 2} (890px) ---')
+                pyautogui.moveTo(scroll_x, scroll_y)
+                time.sleep(0.3)
+                
+                # Execute scroll (890px)
+                for _ in range(SCROLL_CLICKS):
+                    pyautogui.scroll(-SCROLL_STEP)
+                    time.sleep(0.02)
+                
+                # CRITICAL FIX: Wake Up Mechanism for new items
+                # 1. Move mouse to the header area to ensure we haven't scrolled past the list
+                # 2. Hover over the list to trigger lazy load of new cards
+                print("[Hovering to trigger lazy load & waiting 3s for render...]")
+                pyautogui.moveTo(FIRST_ITEM_X - 50, FIRST_ITEM_Y) # Hover near the list
+                time.sleep(3.5) # Wait for WeChat to render new images/DOM
+            else:
+                print('\n[WARN] Lost window bounds, stopping')
+                break
+            
+            page += 1
+    
+    print(f'\n=== Done: {global_idx} items checked ===')
+    print(f'Total unique links saved: {len(saved_links)}')
+    print(f'File: {os.path.abspath(LINKS_FILE)}')
 
 
 if __name__ == "__main__":

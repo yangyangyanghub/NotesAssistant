@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import time
 from datetime import datetime
 
@@ -9,6 +10,9 @@ from PIL import Image
 from wechat_favorites_exporter import content_extractor, window_manager
 from wechat_favorites_exporter.calibrator import CalibrationData
 from wechat_favorites_exporter.config import LONG_SCREENSHOT_OVERLAP, WINDOW_TIMEOUT, random_delay
+
+_IS_MACOS = platform.system() == "Darwin"
+_MODIFIER_KEY = "command" if _IS_MACOS else "ctrl"
 
 
 def should_skip(index: int, preview: dict, output_dir: str) -> bool:
@@ -125,9 +129,9 @@ def export_one_item(
     final_img.save(os.path.join(item_dir, "screenshot.png"))
 
     # Step 7: Extract text
-    pyautogui.hotkey("command", "a")
+    pyautogui.hotkey(_MODIFIER_KEY, "a")
     time.sleep(0.2)
-    pyautogui.hotkey("command", "c")
+    pyautogui.hotkey(_MODIFIER_KEY, "c")
     time.sleep(0.2)
     text = content_extractor.extract_text_from_clipboard()
     if text:

@@ -1,5 +1,4 @@
 import re
-import subprocess
 
 from PIL import Image
 
@@ -66,8 +65,10 @@ def capture_window_screenshot(bounds: tuple[int, int, int, int]) -> Image.Image:
 
 def extract_text_from_clipboard() -> str | None:
     try:
-        result = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=5)
-        return result.stdout if result.stdout else None
+        import pyperclip
+
+        text = pyperclip.paste()
+        return text if text else None
     except Exception:
         return None
 
